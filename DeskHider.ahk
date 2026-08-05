@@ -1,0 +1,392 @@
+﻿; ============================================================================
+;  DeskHider - Toggle desktop icon visibility by double-clicking the desktop
+;  Lightweight: no GUI, no popups; all settings live in DeskHider.ini
+;
+;  Config file: DeskHider.ini in the same folder as this script (or the exe)
+;               Auto-generated on first run; edit it with any text editor
+;  Tray menu:   Open Config File / Reload Config / Exit
+;  Reload Config applies ini changes immediately, no restart required
+; ============================================================================
+
+#SingleInstance, Force
+#Persistent
+
+; ----------------------------------------------------------------------------
+; Configuration variables (defaults; overridden by DeskHider.ini)
+; ----------------------------------------------------------------------------
+IniFile           := A_ScriptDir "\DeskHider.ini"
+Clicks            := 2      ; Mouse clicks to toggle: 2 = double-click, 3 = triple-click
+ClickWindow       := 350    ; Max interval between mouse clicks (ms)
+DesktopHotkey     := ""     ; Desktop hotkey; empty = disabled
+PrevDesktopHotkey := ""     ; Previously registered hotkey (unregistered first on reload)
+HotkeyClicks      := 2      ; Hotkey presses to toggle: 2 = double-press, 3 = triple-press
+HotkeyClickWindow := 350    ; Max interval between hotkey presses (ms); empty = same as mouse
+
+; ----------------------------------------------------------------------------
+; Startup: load config + register the desktop hotkey
+; ----------------------------------------------------------------------------
+LoadConfig()
+RegisterDesktopHotkey()
+
+; ----------------------------------------------------------------------------
+; System tray menu
+; ----------------------------------------------------------------------------
+Menu, Tray, NoStandard
+Menu, Tray, Add, Open Config File, OpenConfigFile
+Menu, Tray, Add, Reload Config, ReloadConfig
+Menu, Tray, Add
+Menu, Tray, Add, Exit, QuitScript
+Menu, Tray, Tip, DeskHider
+
+; ============================================================================
+; Mouse multi-click (active only while the mouse is over the desktop)
+; ============================================================================
+#If IsDesktopUnderMouse()
+~LButton::
+	LButton_presses++
+	SetTimer, KeyLButton, -%ClickWindow%
+	if (LButton_presses = Clicks)
+		MaybeToggleDesktopIcons()
+return
+
+KeyLButton:
+	LButton_presses := 0
+return
+#If
+
+; Toggle icons when the condition is met (original behavior: does not trigger
+; over an icon unless the icons are already hidden)
+MaybeToggleDesktopIcons()
+{
+	global DesktopIconsIsShow
+	if (!IsObject(GetDesktopIconUnderMouse()) or DesktopIconsIsShow = 0)
+		DesktopIconsIsShow := HideOrShowDesktopIcons()
+}
+
+; ============================================================================
+; Config loading / reloading
+; ============================================================================
+LoadConfig()
+{
+	global IniFile, Clicks, ClickWindow, DesktopHotkey
+	global HotkeyClicks, HotkeyClickWindow
+
+	; Create the default config file if it does not exist
+	if (!FileExist(IniFile))
+		CreateDefaultIni()
+
+	IniRead, Clicks, %IniFile%, Settings, Clicks, 2
+	if Clicks is not integer
+		Clicks := 2
+	if (Clicks < 2)
+		Clicks := 2
+	if (Clicks > 5)
+		Clicks := 5
+
+	IniRead, ClickWindow, %IniFile%, Settings, ClickWindow, 350
+	if ClickWindow is not integer
+		ClickWindow := 350
+	if (ClickWindow < 150)
+		ClickWindow := 150
+	if (ClickWindow > 1000)
+		ClickWindow := 1000
+
+	IniRead, DesktopHotkey, %IniFile%, Settings, Hotkey
+	if (DesktopHotkey = "ERROR")          ; key missing -> default hotkey
+		DesktopHotkey := "Space"
+	else if (DesktopHotkey = "")          ; explicitly empty -> disabled
+		DesktopHotkey := ""
+	else
+		DesktopHotkey := NormalizeHotkey(DesktopHotkey)
+
+	IniRead, HotkeyClicks, %IniFile%, Settings, HotkeyClicks, 2
+	if HotkeyClicks is not integer
+		HotkeyClicks := 2
+	if (HotkeyClicks < 2)
+		HotkeyClicks := 2
+	if (HotkeyClicks > 5)
+		HotkeyClicks := 5
+
+	IniRead, HotkeyClickWindow, %IniFile%, Settings, HotkeyClickWindow
+	if (HotkeyClickWindow = "ERROR" or HotkeyClickWindow = "")
+		HotkeyClickWindow := ClickWindow ; empty = same as the mouse click window
+	else
+	{
+		if HotkeyClickWindow is not integer
+			HotkeyClickWindow := ClickWindow
+		if (HotkeyClickWindow < 150)
+			HotkeyClickWindow := 150
+		if (HotkeyClickWindow > 1000)
+			HotkeyClickWindow := 1000
+	}
+}
+
+; Write the default config file template (ANSI/ASCII so AHK v1 IniRead is happy)
+CreateDefaultIni()
+{
+	global IniFile
+	Template =
+(
+; DeskHider configuration file
+; After editing, save the file and click "Reload Config" in the tray menu
+; to apply changes immediately (no restart required)
+; Format: Name=Value ; lines starting with ; are comments
+
+[Settings]
+; Mouse clicks needed to toggle: 2 = double-click, 3 = triple-click (only one supported)
+Clicks=2
+
+; Max interval between mouse clicks, in milliseconds
+; Double-click: 300-500 recommended; triple-click: 400-600 recommended
+ClickWindow=350
+
+; Desktop hotkey: triggers when any of the following is true; empty = disabled
+;   1) No visible top-level windows (all windows closed / all minimized)
+;   2) The desktop is focused (e.g., you clicked the desktop while a window is open)
+; Two syntaxes are supported; for the space bar use "Space":
+;   Friendly: Ctrl+Space, Ctrl+Alt+H, Shift+F1
+;   AHK native: ^Space, ^!h, +F1
+; Example: Ctrl+Space = hold Ctrl and press Space
+; Note: the hotkey triggers on a multi-press; it never swallows keys or affects typing
+Hotkey=Space
+
+; Hotkey presses needed to toggle (2 = double-press, 3 = triple-press).
+; Default 2, same as the mouse
+HotkeyClicks=2
+
+; Max interval between hotkey presses, in milliseconds.
+; Empty = same as the mouse ClickWindow
+HotkeyClickWindow= 350
+)
+	FileAppend, %Template%, %IniFile%
+}
+
+; Re-register the desktop hotkey (applied immediately after "Reload Config")
+; Uses ~ pass-through + Up (release) events: never swallows keys, does not
+; affect typing, and holding the key down does not repeat-count
+RegisterDesktopHotkey()
+{
+	global DesktopHotkey, PrevDesktopHotkey
+	; Unregister the previous hotkey first, then register the new one
+	; (invalid values are silently ignored, no popups)
+	if (PrevDesktopHotkey <> "")
+		try Hotkey, ~%PrevDesktopHotkey% Up, ToggleDesktopHotkey, Off
+	if (DesktopHotkey <> "")
+		try Hotkey, ~%DesktopHotkey% Up, ToggleDesktopHotkey, On
+	PrevDesktopHotkey := DesktopHotkey
+}
+
+; Returns 1 when the desktop should be considered active (either condition):
+;   1) The desktop has focus (active window is the desktop, e.g. you clicked it)
+;   2) No visible top-level windows exist (all closed / all minimized)
+; Returns 0 otherwise
+IsDesktopFocused()
+{
+	; Condition 1: the desktop is focused
+	WinGetClass, winClass, A
+	if (winClass = "WorkerW" or winClass = "Progman")
+		return 1
+
+	; Condition 2: no visible top-level windows
+	WinGet, winList, List
+	loop, %winList%
+	{
+		hwnd := winList%A_Index%
+		WinGet, style, Style, ahk_id %hwnd%
+		if (style & 0x20000000)        ; minimized windows don't count
+			continue
+		if (!(style & 0x10000000))     ; invisible windows don't count
+			continue
+		WinGet, exStyle, ExStyle, ahk_id %hwnd%
+		if (exStyle & 0x80)            ; tool windows (tray/notifications) don't count
+			continue
+		WinGetClass, cls, ahk_id %hwnd%
+		if (cls = "WorkerW" or cls = "Progman" or cls = "Shell_TrayWnd" or cls = "Shell_SecondaryTrayWnd")
+			continue                   ; desktop / taskbar windows don't count
+		return 0                       ; found a visible normal window
+	}
+	return 1                           ; no visible normal windows
+}
+
+; Normalize a hotkey string into AHK native syntax.
+; Both of these are accepted:
+;   AHK native: ^!h, ^Space, #F5, +F1
+;   Friendly:   Ctrl+Alt+H, Ctrl+Space, Shift+F1, Space
+NormalizeHotkey(raw)
+{
+	if (raw = "")
+		return ""
+	raw := Trim(raw)
+	if (raw = "")
+		return ""
+	; Strip a leading ~ the user may have written (pass-through is handled by the program)
+	raw := RegExReplace(raw, "^~+", "")
+	if (raw = "")
+		return ""
+	; Modifier-only values (e.g. "^" or "Ctrl+") become the Space key
+	if (RegExMatch(raw, "^[\^!+#]+$"))
+		return raw . "Space"
+	; Contains ^ ! #, or starts with + = AHK native syntax, use as-is
+	if (InStr(raw, "^") or InStr(raw, "!") or InStr(raw, "#") or SubStr(raw, 1, 1) = "+")
+		return raw
+
+	; Friendly syntax: split by "+" into modifiers + key
+	prefix := ""
+	key := ""
+	for i, part in StrSplit(raw, "+")
+	{
+		part := Trim(part)
+		if (part = "")
+			continue
+		if (part = "Ctrl")
+			prefix .= "^"
+		else if (part = "Alt")
+			prefix .= "!"
+		else if (part = "Shift")
+			prefix .= "+"
+		else if (part = "Win")
+			prefix .= "#"
+		else if (key = "")
+			key := FriendlyKeyName(part)
+		else
+			return raw ; multiple keys: return as-is (AHK will reject it silently)
+	}
+	if (key = "")
+		return raw ; modifiers only: return as-is (invalid, will be ignored)
+	return prefix . key
+}
+
+; Map a friendly key name to an AHK key name (e.g. Space -> Space, Delete -> Delete)
+FriendlyKeyName(name)
+{
+	; Chinese alias for the space bar (kept for convenience)
+	if (name = "空格")
+		return "Space"
+	static map := {space:"Space", enter:"Enter", tab:"Tab", esc:"Esc", escape:"Esc"
+		, delete:"Delete", del:"Delete", insert:"Insert", ins:"Insert"
+		, home:"Home", end:"End", pgup:"PgUp", pageup:"PgUp", pgdn:"PgDn", pagedown:"PgDn"
+		, up:"Up", down:"Down", left:"Left", right:"Right"
+		, printscreen:"PrintScreen", prtsc:"PrintScreen", prtscr:"PrintScreen"
+		, capslock:"CapsLock", numlock:"NumLock", scrolllock:"ScrollLock"}
+	StringLower, low, name
+	if (map.HasKey(low))
+		return map[low]
+	; Single letter -> uppercase (e.g. a -> A)
+	if (StrLen(name) = 1 and RegExMatch(name, "i)^[a-z]$"))
+	{
+		StringUpper, up, name
+		return up
+	}
+	return name
+}
+
+; ============================================================================
+; Tray menu handlers
+; ============================================================================
+OpenConfigFile:
+	Run, notepad.exe "%IniFile%"
+return
+
+ReloadConfig:
+	LoadConfig()
+	RegisterDesktopHotkey()
+	LButton_presses := 0
+	DesktopHotkey_presses := 0
+return
+
+; Desktop hotkey: fires when the desktop is active; toggles after HotkeyClicks
+; presses (2 by default). Counts on key release only, so holding the key down
+; never triggers; ~ pass-through keeps typing unaffected
+ToggleDesktopHotkey:
+	if (!IsDesktopFocused())
+	{
+		DesktopHotkey_presses := 0
+		return
+	}
+	DesktopHotkey_presses++
+	SetTimer, KeyDesktopHotkey, -%HotkeyClickWindow%
+	if (DesktopHotkey_presses = HotkeyClicks)
+		DesktopIconsIsShow := HideOrShowDesktopIcons()
+return
+
+KeyDesktopHotkey:
+	DesktopHotkey_presses := 0
+return
+
+QuitScript:
+	ExitApp
+return
+
+; ============================================================================
+; Original core functions (unchanged)
+; ============================================================================
+
+IsDesktopUnderMouse()
+{
+	MouseGetPos, , , OutputVarWin
+	WinGetClass, OutputVarClass, % "ahk_id" OutputVarWin
+	if (OutputVarClass="WorkerW" or OutputVarClass="Progman")
+		return, 1
+	else
+		return, 0
+}
+
+HideOrShowDesktopIcons()
+{
+	ControlGet, OutputVarHwnd, Hwnd,, SysListView321, ahk_class WorkerW
+	if (OutputVarHwnd="")
+      ControlGet, OutputVarHwnd, Hwnd,, SysListView321, ahk_class Progman
+
+	if (DllCall("IsWindowVisible", UInt, OutputVarHwnd))
+	{
+		WinHide, ahk_id %OutputVarHwnd%
+		return, 0
+	}
+	else
+	{
+		WinShow, ahk_id %OutputVarHwnd%
+		return, 1
+	}
+}
+
+GetDesktopIconUnderMouse() {
+	static MEM_COMMIT := 0x1000, MEM_RELEASE := 0x8000, PAGE_ReadWRITE := 0x04
+		, PROCESS_VM_OPERATION := 0x0008, PROCESS_VM_READ := 0x0010
+		, LVM_GETITEMCOUNT := 0x1004, LVM_GETITEMRECT := 0x100E
+
+	Icon := ""
+	MouseGetPos, x, y, hwnd
+	if not (hwnd = WinExist("ahk_class Progman") || hwnd = WinExist("ahk_class WorkerW"))
+		return
+	ControlGet, hwnd, HWND, , SysListView321
+	if not WinExist("ahk_id" hwnd)
+		return
+	WinGet, pid, PID
+	if (hProcess := DllCall("OpenProcess" , "UInt", Process_VM_OPERATION|Process_VM_Read, "Int",  false, "UInt", pid)) {
+		VarSetCapacity(iCoord, 16)
+		SendMessage, %LVM_GETITEMCOUNT%, 0, 0
+		loop, %ErrorLevel% {
+			pItemCoord := DllCall("VirtualAllocEx", "Ptr", hProcess, "Ptr", 0, "UInt", 16, "UInt", MEM_COMMIT, "UInt", PAGE_ReadWRITE)
+			SendMessage, %LVM_GETITEMRECT%, % A_Index-1, %pItemCoord%
+			DllCall("ReadProcessMemory", "Ptr", hProcess, "Ptr", pItemCoord, "Ptr", &iCoord, "UInt", 16, "UInt", 0)
+			DllCall("VirtualFreeEx", "Ptr", hProcess, "Ptr", pItemCoord, "UInt", 0, "UInt", MEM_RELEASE)
+			left   := NumGet(iCoord,  0, "Int")
+			top    := NumGet(iCoord,  4, "Int")
+			Right  := NumGet(iCoord,  8, "Int")
+			bottom := NumGet(iCoord, 12, "Int")
+			if (left < x and x < Right and top < y and y < bottom) {
+				ControlGet, list, List
+				RegExMatch(StrSplit(list, "`n")[A_Index], "O)(.*)\t(.*)\t(.*)\t(.*)", Match)
+				Icon := {left:left, top:top, Right:Right, bottom:bottom
+					, name:Match[1], size:Match[2], type:Match[3]
+				; Delete extraneous date characters (https://goo.gl/pMw6AM):
+				; - Unicode LTR (Left-to-Right) mark (0x200E = 8206)
+				; - Unicode RTL (Right-to-Left) mark (0x200F = 8207)
+					, date:RegExReplace(Match[4], A_IsUnicode ? "[\x{200E}-\x{200F}]" : "\?")}
+				break
+			}
+		}
+		DllCall("CloseHandle", "Ptr", hProcess)
+	}
+	return Icon
+}
