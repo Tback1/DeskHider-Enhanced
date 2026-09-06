@@ -1,0 +1,6 @@
+# Local dev / test tooling and artifacts (not part of the project)
+_tools/
+_test/
+deploy/
+DeskHider.ini
+DeskHider_CN.ini

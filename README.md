@@ -38,6 +38,7 @@ ClickWindow=350       ; click interval (ms)
 Hotkey=Space          ; desktop hotkey, empty=disabled
 HotkeyClicks=2        ; hotkey presses to toggle, default 2
 HotkeyClickWindow=350 ; hotkey interval (ms), empty=same as ClickWindow
+AutoHideSeconds=0     ; auto-hide after N seconds of clear desktop, 0=disabled
 ```
 
 | Key | Default | Description |
@@ -47,6 +48,7 @@ HotkeyClickWindow=350 ; hotkey interval (ms), empty=same as ClickWindow
 | `Hotkey` | `Space` | Desktop hotkey (default `Space`, double-press); empty = disabled. Fires when **either** ① no visible top-level windows exist (all closed / all minimized), or ② the desktop is focused (e.g. you clicked the desktop while a window is open). The **space bar is supported**: `Ctrl+Space`, `Space`. Two syntaxes: friendly `Ctrl+Alt+H`, or AHK native `^!h` (`^`=Ctrl, `!`=Alt, `+`=Shift, `#`=Win). Multi-press triggered (2 presses by default); never swallows keys, typing is unaffected. |
 | `HotkeyClicks` | `2` | Hotkey presses needed to toggle (2 = double-press, 3 = triple-press). |
 | `HotkeyClickWindow` | *(same as mouse)* | Max interval between hotkey presses in milliseconds (150–1000). Empty = same as `ClickWindow`. |
+| `AutoHideSeconds` | `0` | **Auto-hide**: when the icons are visible and **no normal windows are on screen** (all closed / all minimized) for this many seconds, the icons are hidden automatically. `0` = disabled. The countdown restarts as soon as any window becomes visible again, or whenever the icons are not visible. Restore the icons with your usual toggle (double-click / hotkey). Example: `30` = hide icons after 30 seconds of clear desktop. |
 
 ### Example
 
@@ -61,6 +63,15 @@ HotkeyClickWindow=500
 
 Triple-click the desktop to toggle icons, or double-press `Ctrl+Space` (while the desktop is active) to toggle.
 
+### Auto-hide example
+
+```ini
+[Settings]
+AutoHideSeconds=30
+```
+
+Close or minimize every window, and after 30 seconds of nothing but the desktop, the icons hide themselves — handy for a clean wallpaper view. Open any window (or toggle the icons manually) and the countdown resets; the icons are never auto-*shown*, only hidden.
+
 ## After changing the config
 
 Save `DeskHider.ini` → right-click the tray icon → **Reload Config** → done.
@@ -70,7 +81,7 @@ Save `DeskHider.ini` → right-click the tray icon → **Reload Config** → don
 Install [AutoHotkey v1](https://www.autohotkey.com/) (it includes the Ahk2Exe compiler):
 
 - Right-click `DeskHider.ahk` → **Compile Script**, or
-- Open Ahk2Exe, select `DeskHider.ahk`, output `DeskHider.exe`, compile.
+- Open Ahk2Exe, select `DeskHider.ahk`, set the icon to `DeskHider.ico`, output `DeskHider.exe`, compile.
 
 ## License
 

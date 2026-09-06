@@ -1,42 +1,41 @@
 ﻿; ============================================================================
-;  DeskHider - Toggle desktop icon visibility by double-clicking the desktop
-;  Lightweight: no GUI, no popups; all settings live in DeskHider.ini
+;  DeskHider_CN - 双击桌面空白处，切换桌面图标的显示 / 隐藏
+;  轻量化：无界面、无弹窗；所有设置都保存在 DeskHider_CN.ini
 ;
-;  Config file: DeskHider.ini in the same folder as this script (or the exe)
-;               Auto-generated on first run; edit it with any text editor
-;  Tray menu:   Open Config File / Reload Config / Exit
-;  Reload Config applies ini changes immediately, no restart required
+;  配置文件：与本脚本（或 exe）同目录的 DeskHider_CN.ini
+;           首次运行时自动生成；可用任意文本编辑器修改
+;  托盘菜单：Open Config File / Reload Config / Exit
+;  托盘点 Reload Config 可让 ini 修改立即生效，无需重启程序
 ;
-;  Auto-hide:    optionally hides the icons automatically after the desktop
-;                has been clear of windows for a while (AutoHideSeconds,
-;                0 = disabled)
+;  自动隐藏：图标处于显示状态、且屏幕上没有任何可见窗口并持续一段时间后，
+;           自动隐藏图标（AutoHideSeconds，0 = 禁用）
 ; ============================================================================
 
 #SingleInstance, Force
 #Persistent
 
 ; ----------------------------------------------------------------------------
-; Configuration variables (defaults; overridden by DeskHider.ini)
+; 配置变量（默认值；实际以 DeskHider_CN.ini 为准）
 ; ----------------------------------------------------------------------------
-IniFile           := A_ScriptDir "\DeskHider.ini"
-Clicks            := 2      ; Mouse clicks to toggle: 2 = double-click, 3 = triple-click
-ClickWindow       := 350    ; Max interval between mouse clicks (ms)
-DesktopHotkey     := ""     ; Desktop hotkey; empty = disabled
-PrevDesktopHotkey := ""     ; Previously registered hotkey (unregistered first on reload)
-HotkeyClicks      := 2      ; Hotkey presses to toggle: 2 = double-press, 3 = triple-press
-HotkeyClickWindow := 350    ; Max interval between hotkey presses (ms); empty = same as mouse
-AutoHideSeconds   := 0      ; Auto-hide icons after N seconds of windowless desktop; 0 = disabled
-AutoHideStart     := ""     ; TickCount when the current clear-desktop streak began ("" = not counting)
+IniFile           := A_ScriptDir "\DeskHider_CN.ini"
+Clicks            := 2      ; 鼠标连击次数：2 = 双击，3 = 三击
+ClickWindow       := 350    ; 鼠标连击最大间隔（毫秒）
+DesktopHotkey     := ""     ; 桌面快捷键；留空 = 禁用
+PrevDesktopHotkey := ""     ; 上一次注册的快捷键（Reload 时先注销再注册）
+HotkeyClicks      := 2      ; 快捷键连按次数：2 = 双按，3 = 三按
+HotkeyClickWindow := 350    ; 快捷键连按最大间隔（毫秒）；留空 = 与鼠标相同
+AutoHideSeconds   := 0      ; 无窗口状态持续 N 秒后自动隐藏图标；0 = 禁用
+AutoHideStart     := ""     ; 当前"无窗口"计时的起始 TickCount（"" = 未在计时）
 
 ; ----------------------------------------------------------------------------
-; Startup: load config + register the desktop hotkey
+; 启动：读取配置 + 注册桌面快捷键
 ; ----------------------------------------------------------------------------
 LoadConfig()
 RegisterDesktopHotkey()
-SetTimer, AutoHideCheck, 1000     ; 1-second auto-hide watchdog (idle while disabled)
+SetTimer, AutoHideCheck, 1000     ; 每秒一次的自动隐藏检查（禁用时自动空转）
 
 ; ----------------------------------------------------------------------------
-; System tray menu
+; 托盘菜单
 ; ----------------------------------------------------------------------------
 Menu, Tray, NoStandard
 Menu, Tray, Add, Open Config File, OpenConfigFile
@@ -46,7 +45,7 @@ Menu, Tray, Add, Exit, QuitScript
 Menu, Tray, Tip, DeskHider
 
 ; ============================================================================
-; Mouse multi-click (active only while the mouse is over the desktop)
+; 鼠标连击（仅在鼠标位于桌面上时生效）
 ; ============================================================================
 #If IsDesktopUnderMouse()
 ~LButton::
@@ -61,8 +60,8 @@ KeyLButton:
 return
 #If
 
-; Toggle icons when the condition is met (original behavior: does not trigger
-; over an icon unless the icons are already hidden)
+; 满足条件时切换图标显隐（保留原行为：图标未隐藏时，点在图标上不触发，
+; 不影响正常打开图标）
 MaybeToggleDesktopIcons()
 {
 	global DesktopIconsIsShow
@@ -71,14 +70,14 @@ MaybeToggleDesktopIcons()
 }
 
 ; ============================================================================
-; Config loading / reloading
+; 配置的读取 / 重载
 ; ============================================================================
 LoadConfig()
 {
 	global IniFile, Clicks, ClickWindow, DesktopHotkey
 	global HotkeyClicks, HotkeyClickWindow, AutoHideSeconds
 
-	; Create the default config file if it does not exist
+	; 配置文件不存在时，先生成默认配置
 	if (!FileExist(IniFile))
 		CreateDefaultIni()
 
@@ -99,9 +98,9 @@ LoadConfig()
 		ClickWindow := 1000
 
 	IniRead, DesktopHotkey, %IniFile%, Settings, Hotkey
-	if (DesktopHotkey = "ERROR")          ; key missing -> default hotkey
+	if (DesktopHotkey = "ERROR")          ; 键不存在 -> 使用默认快捷键
 		DesktopHotkey := "Space"
-	else if (DesktopHotkey = "")          ; explicitly empty -> disabled
+	else if (DesktopHotkey = "")          ; 显式留空 -> 禁用
 		DesktopHotkey := ""
 	else
 		DesktopHotkey := NormalizeHotkey(DesktopHotkey)
@@ -116,7 +115,7 @@ LoadConfig()
 
 	IniRead, HotkeyClickWindow, %IniFile%, Settings, HotkeyClickWindow
 	if (HotkeyClickWindow = "ERROR" or HotkeyClickWindow = "")
-		HotkeyClickWindow := ClickWindow ; empty = same as the mouse click window
+		HotkeyClickWindow := ClickWindow ; 留空 = 与鼠标连击间隔相同
 	else
 	{
 		if HotkeyClickWindow is not integer
@@ -127,7 +126,7 @@ LoadConfig()
 			HotkeyClickWindow := 1000
 	}
 
-	; Auto-hide delay in seconds; anything invalid or negative = disabled
+	; 自动隐藏的触发秒数；非法值或负数 = 禁用
 	IniRead, AutoHideSeconds, %IniFile%, Settings, AutoHideSeconds, 0
 	if AutoHideSeconds is not integer
 		AutoHideSeconds := 0
@@ -135,61 +134,55 @@ LoadConfig()
 		AutoHideSeconds := 0
 }
 
-; Write the default config file template (ANSI/ASCII so AHK v1 IniRead is happy)
+; 生成默认配置文件模板
 CreateDefaultIni()
 {
 	global IniFile
 	Template =
 	(
-; DeskHider configuration file
-; After editing, save the file and click "Reload Config" in the tray menu
-; to apply changes immediately (no restart required)
-; Format: Name=Value ; lines starting with ; are comments
+; DeskHider_CN 配置文件
+; 修改保存后，在托盘菜单点"Reload Config"即可生效（无需重启程序）
+; 每项格式：名称=值，行首分号 ; 表示注释
 
 [Settings]
-; Mouse clicks needed to toggle: 2 = double-click, 3 = triple-click (only one supported)
+; 鼠标连击次数：2 = 双击切换，3 = 三击切换（最多支持一种连击）
 Clicks=2
 
-; Max interval between mouse clicks, in milliseconds
-; Double-click: 300-500 recommended; triple-click: 400-600 recommended
+; 鼠标连击间隔（毫秒）：两次点击之间的最大时间间隔
+; 双击建议 300-500，三击建议 400-600
 ClickWindow=350
 
-; Desktop hotkey: triggers when any of the following is true; empty = disabled
-;   1) No visible top-level windows (all windows closed / all minimized)
-;   2) The desktop is focused (e.g., you clicked the desktop while a window is open)
-; Two syntaxes are supported; for the space bar use "Space":
-;   Friendly: Ctrl+Space, Ctrl+Alt+H, Shift+F1
-;   AHK native: ^Space, ^!h, +F1
-; Example: Ctrl+Space = hold Ctrl and press Space
-; Note: the hotkey triggers on a multi-press; it never swallows keys or affects typing
+; 桌面快捷键：满足下面任一条件才触发，留空 = 禁用
+;   1) 没有可见的顶层窗口（窗口全部关闭 / 全部最小化）
+;   2) 焦点在桌面（例如有窗口时单击过一次桌面）
+; 支持两种写法，空格键可写 Space 或 空格：
+;   友好写法：Ctrl+Space、Ctrl+Alt+H、Shift+F1、空格
+;   AHK 写法：^Space、^!h、+F1
+; 示例：Ctrl+Space = 按住 Ctrl 再按空格
+; 提示：热键是"连按触发"，不吞按键、不影响输入
 Hotkey=Space
 
-; Hotkey presses needed to toggle (2 = double-press, 3 = triple-press).
-; Default 2, same as the mouse
+; 桌面快捷键连击次数（2 = 双击，3 = 三击），默认 2，和鼠标一样
 HotkeyClicks=2
 
-; Max interval between hotkey presses, in milliseconds.
-; Empty = same as the mouse ClickWindow
+; 桌面快捷键连击间隔（毫秒），留空 = 与鼠标 ClickWindow 相同
 HotkeyClickWindow= 350
 
-; Auto-hide icons: when the icons are visible and NO normal windows are on
-; screen (all closed / all minimized) for this many seconds, the icons are
-; hidden automatically. 0 = disabled. As soon as any window becomes visible
-; again the countdown restarts; restore the icons with your usual toggle
-; (double-click / hotkey)
+; 自动隐藏图标：当图标处于显示状态，且屏幕上没有任何普通窗口
+; （窗口全部关闭 / 全部最小化）持续达到该秒数后，自动隐藏图标
+; 0 = 禁用该功能；期间只要出现任何可见窗口，计时就会重新开始
+; 重新显示图标用平时的方式即可（双击桌面 / 快捷键）
 AutoHideSeconds=0
 	)
 	FileAppend, %Template%, %IniFile%
 }
 
-; Re-register the desktop hotkey (applied immediately after "Reload Config")
-; Uses ~ pass-through + Up (release) events: never swallows keys, does not
-; affect typing, and holding the key down does not repeat-count
+; （重新）注册桌面快捷键，托盘点"Reload Config"后立即生效
+; 使用 ~ 透传 + Up（松开）事件：不吞按键、不影响打字，按住不放不会重复计数
 RegisterDesktopHotkey()
 {
 	global DesktopHotkey, PrevDesktopHotkey
-	; Unregister the previous hotkey first, then register the new one
-	; (invalid values are silently ignored, no popups)
+	; 先注销旧的，再注册新的（非法值会被静默忽略，不弹窗）
 	if (PrevDesktopHotkey <> "")
 		try Hotkey, ~%PrevDesktopHotkey% Up, ToggleDesktopHotkey, Off
 	if (DesktopHotkey <> "")
@@ -197,24 +190,23 @@ RegisterDesktopHotkey()
 	PrevDesktopHotkey := DesktopHotkey
 }
 
-; Returns 1 when the desktop should be considered active (either condition):
-;   1) The desktop has focus (active window is the desktop, e.g. you clicked it)
-;   2) No visible top-level windows exist (all closed / all minimized)
-; Returns 0 otherwise
+; 判断"桌面处于可触发状态"（满足任一条件即返回 1，否则返回 0）：
+;   1) 焦点在桌面（活动窗口就是桌面，例如点过一次桌面）
+;   2) 没有可见的顶层窗口（窗口全部关闭 / 全部最小化）
 IsDesktopFocused()
 {
-	; Condition 1: the desktop is focused
+	; 条件 1：焦点在桌面
 	WinGetClass, winClass, A
 	if (winClass = "WorkerW" or winClass = "Progman")
 		return 1
 
-	; Condition 2: no visible top-level windows
+	; 条件 2：没有可见的顶层窗口
 	return IsDesktopClear()
 }
 
-; Returns 1 when no visible normal top-level windows exist (all closed / all
-; minimized). Minimized, hidden, tool and cloaked windows as well as the
-; desktop and taskbar windows themselves don't count.
+; 屏幕上没有任何"可见的普通窗口"时返回 1（全部关闭 / 全部最小化）。
+; 最小化、隐藏、工具窗口、被 DWM 遮蔽的窗口，以及桌面和任务栏窗口本身，
+; 都不算"可见的普通窗口"。
 IsDesktopClear()
 {
 	WinGet, winList, List
@@ -222,26 +214,26 @@ IsDesktopClear()
 	{
 		hwnd := winList%A_Index%
 		WinGet, style, Style, ahk_id %hwnd%
-		if (style & 0x20000000)        ; minimized windows don't count
+		if (style & 0x20000000)        ; 最小化的窗口不算
 			continue
-		if (!(style & 0x10000000))     ; invisible windows don't count
+		if (!(style & 0x10000000))     ; 不可见的窗口不算
 			continue
 		WinGet, exStyle, ExStyle, ahk_id %hwnd%
-		if (exStyle & 0x80)            ; tool windows (tray/notifications) don't count
+		if (exStyle & 0x80)            ; 工具窗口（托盘/通知类）不算
 			continue
-		if IsWindowCloaked(hwnd)       ; suspended UWP / other-virtual-desktop windows don't count
+		if IsWindowCloaked(hwnd)       ; 被 DWM 遮蔽的窗口（挂起的 UWP 等）不算
 			continue
 		WinGetClass, cls, ahk_id %hwnd%
 		if (cls = "WorkerW" or cls = "Progman" or cls = "Shell_TrayWnd" or cls = "Shell_SecondaryTrayWnd")
-			continue                   ; desktop / taskbar windows don't count
-		return 0                       ; found a visible normal window
+			continue                   ; 桌面 / 任务栏窗口不算
+		return 0                       ; 找到一个可见的普通窗口
 	}
-	return 1                           ; no visible normal windows
+	return 1                           ; 没有可见的普通窗口
 }
 
-; DWMWA_CLOAKED (14): nonzero when DWM hides the window while keeping it
-; technically "visible" (suspended UWP apps, windows on inactive virtual
-; desktops). Fails gracefully on systems without DWM support -> returns 0.
+; DWMWA_CLOAKED（14）：窗口被 DWM"遮蔽"时返回非 0（典型：挂起的 UWP 应用、
+; 其他虚拟桌面上的窗口——样式上"可见"但屏幕上并没有显示）。
+; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统下都安全。
 IsWindowCloaked(hwnd)
 {
 	cloaked := 0
@@ -249,10 +241,9 @@ IsWindowCloaked(hwnd)
 	return cloaked ? 1 : 0
 }
 
-; Normalize a hotkey string into AHK native syntax.
-; Both of these are accepted:
-;   AHK native: ^!h, ^Space, #F5, +F1
-;   Friendly:   Ctrl+Alt+H, Ctrl+Space, Shift+F1, Space
+; 把快捷键写法统一转换成 AHK 原生语法，两种写法都支持：
+;   AHK 原生：^!h、^Space、#F5、+F1
+;   友好写法：Ctrl+Alt+H、Ctrl+Space、Shift+F1、Space
 NormalizeHotkey(raw)
 {
 	if (raw = "")
@@ -260,18 +251,18 @@ NormalizeHotkey(raw)
 	raw := Trim(raw)
 	if (raw = "")
 		return ""
-	; Strip a leading ~ the user may have written (pass-through is handled by the program)
+	; 去掉用户可能多写的 ~ 前缀（透传由程序自己处理）
 	raw := RegExReplace(raw, "^~+", "")
 	if (raw = "")
 		return ""
-	; Modifier-only values (e.g. "^" or "Ctrl+") become the Space key
+	; 只有修饰键（例如 "^" 或 "Ctrl+"）时，默认按到空格键上
 	if (RegExMatch(raw, "^[\^!+#]+$"))
 		return raw . "Space"
-	; Contains ^ ! #, or starts with + = AHK native syntax, use as-is
+	; 含 ^ ! #，或以 + 开头 = AHK 原生写法，原样使用
 	if (InStr(raw, "^") or InStr(raw, "!") or InStr(raw, "#") or SubStr(raw, 1, 1) = "+")
 		return raw
 
-	; Friendly syntax: split by "+" into modifiers + key
+	; 友好写法：按 "+" 拆分成修饰键 + 按键
 	prefix := ""
 	key := ""
 	for i, part in StrSplit(raw, "+")
@@ -290,17 +281,17 @@ NormalizeHotkey(raw)
 		else if (key = "")
 			key := FriendlyKeyName(part)
 		else
-			return raw ; multiple keys: return as-is (AHK will reject it silently)
+			return raw ; 多个按键：原样返回（AHK 会静默忽略）
 	}
 	if (key = "")
-		return raw ; modifiers only: return as-is (invalid, will be ignored)
+		return raw ; 只有修饰键：原样返回（非法，会被忽略）
 	return prefix . key
 }
 
-; Map a friendly key name to an AHK key name (e.g. Space -> Space, Delete -> Delete)
+; 友好按键名 -> AHK 按键名（例如 Space -> Space、Delete -> Delete）
 FriendlyKeyName(name)
 {
-	; Chinese alias for the space bar (kept for convenience)
+	; 空格键的中文别名（保留方便中文用户）
 	if (name = "空格")
 		return "Space"
 	static map := {space:"Space", enter:"Enter", tab:"Tab", esc:"Esc", escape:"Esc"
@@ -312,7 +303,7 @@ FriendlyKeyName(name)
 	StringLower, low, name
 	if (map.HasKey(low))
 		return map[low]
-	; Single letter -> uppercase (e.g. a -> A)
+	; 单个字母 -> 转大写（例如 a -> A）
 	if (StrLen(name) = 1 and RegExMatch(name, "i)^[a-z]$"))
 	{
 		StringUpper, up, name
@@ -322,7 +313,7 @@ FriendlyKeyName(name)
 }
 
 ; ============================================================================
-; Tray menu handlers
+; 托盘菜单处理
 ; ============================================================================
 OpenConfigFile:
 	Run, notepad.exe "%IniFile%"
@@ -333,12 +324,11 @@ ReloadConfig:
 	RegisterDesktopHotkey()
 	LButton_presses := 0
 	DesktopHotkey_presses := 0
-	AutoHideStart := ""    ; restart the auto-hide countdown with the new settings
+	AutoHideStart := ""    ; 用新配置重新开始自动隐藏的计时
 return
 
-; Desktop hotkey: fires when the desktop is active; toggles after HotkeyClicks
-; presses (2 by default). Counts on key release only, so holding the key down
-; never triggers; ~ pass-through keeps typing unaffected
+; 桌面快捷键：桌面处于可触发状态时才计数，连按 HotkeyClicks 次（默认 2 次）
+; 触发。只在松开（Up）时计数，按住不放不会触发；~ 透传不影响打字
 ToggleDesktopHotkey:
 	if (!IsDesktopFocused())
 	{
@@ -360,34 +350,33 @@ QuitScript:
 return
 
 ; ============================================================================
-; Auto-hide timer
+; 自动隐藏计时器
 ; ============================================================================
-; Runs once a second. When the feature is enabled (AutoHideSeconds > 0) it
-; watches for a "clear desktop": icons visible AND no visible normal windows.
-; Once that state lasts AutoHideSeconds, the icons are hidden once; the
-; countdown restarts whenever a window appears or the icons are not visible.
+; 每秒运行一次。功能开启时（AutoHideSeconds > 0）监视"干净桌面"状态：
+; 图标可见 且 屏幕上没有可见的普通窗口。该状态持续达到 AutoHideSeconds
+; 秒后，自动隐藏一次图标；只要出现窗口、或图标本就不可见，计时立即清零。
 AutoHideCheck:
-	if (AutoHideSeconds < 1)                    ; feature disabled -> stay idle
+	if (AutoHideSeconds < 1)                    ; 功能禁用 -> 空转
 		return
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
 	{
-		AutoHideStart := ""                     ; streak broken -> reset
+		AutoHideStart := ""                     ; 条件被打破 -> 重置计时
 		return
 	}
 	if (AutoHideStart = "")
 	{
-		AutoHideStart := A_TickCount            ; clear-desktop streak begins now
+		AutoHideStart := A_TickCount            ; "无窗口"计时开始
 		return
 	}
 	if (A_TickCount - AutoHideStart >= AutoHideSeconds * 1000)
 	{
 		AutoHideStart := ""
-		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; sync with the click/hotkey logic
+		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; 与点击/快捷键的状态保持同步
 	}
 return
 
 ; ============================================================================
-; Original core functions (unchanged)
+; 原有核心函数（未改动）
 ; ============================================================================
 
 IsDesktopUnderMouse()
@@ -418,9 +407,9 @@ HideOrShowDesktopIcons()
 	}
 }
 
-; Returns 1 when the desktop icon ListView is currently visible, 0 when it is
-; hidden (or cannot be found). Queries the real window state instead of the
-; DesktopIconsIsShow flag, so it is also correct at script start.
+; 桌面图标列表（SysListView32）当前是否可见：可见返回 1，隐藏（或找不到
+; 控件）返回 0。直接查询真实窗口状态，而不是依赖 DesktopIconsIsShow 标记，
+; 因此脚本刚启动时结果也是准确的。
 AreDesktopIconsVisible()
 {
 	hwnd := ""
@@ -462,9 +451,9 @@ GetDesktopIconUnderMouse() {
 				RegExMatch(StrSplit(list, "`n")[A_Index], "O)(.*)\t(.*)\t(.*)\t(.*)", Match)
 				Icon := {left:left, top:top, Right:Right, bottom:bottom
 					, name:Match[1], size:Match[2], type:Match[3]
-				; Delete extraneous date characters (https://goo.gl/pMw6AM):
-				; - Unicode LTR (Left-to-Right) mark (0x200E = 8206)
-				; - Unicode RTL (Right-to-Left) mark (0x200F = 8207)
+				; 去掉日期里多余的字符（https://goo.gl/pMw6AM）：
+				; - Unicode LTR（从左到右）标记 (0x200E = 8206)
+				; - Unicode RTL（从右到左）标记 (0x200F = 8207)
 					, date:RegExReplace(Match[4], A_IsUnicode ? "[\x{200E}-\x{200F}]" : "\?")}
 				break
 			}
