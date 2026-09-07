@@ -8,12 +8,14 @@
 ;  Reload Config applies ini changes immediately, no restart required
 ;
 ;  Auto-hide:    optionally hides the icons automatically after the desktop
-;                has been clear of windows for a while (AutoHideSeconds,
-;                0 = disabled)
+;                has been clear of windows AND free of mouse/keyboard input
+;                for a while (AutoHideSeconds, 0 = disabled)
 ; ============================================================================
 
 #SingleInstance, Force
 #Persistent
+#InstallMouseHook                 ; make A_TimeIdlePhysical track physical input
+#InstallKeybdHook                 ; (needed by the auto-hide idle check)
 
 ; ----------------------------------------------------------------------------
 ; Configuration variables (defaults; overridden by DeskHider.ini)
@@ -26,7 +28,6 @@ PrevDesktopHotkey := ""     ; Previously registered hotkey (unregistered first o
 HotkeyClicks      := 2      ; Hotkey presses to toggle: 2 = double-press, 3 = triple-press
 HotkeyClickWindow := 350    ; Max interval between hotkey presses (ms); empty = same as mouse
 AutoHideSeconds   := 0      ; Auto-hide icons after N seconds of windowless desktop; 0 = disabled
-AutoHideStart     := ""     ; TickCount when the current clear-desktop streak began ("" = not counting)
 
 ; ----------------------------------------------------------------------------
 ; Startup: load config + register the desktop hotkey
@@ -174,8 +175,8 @@ HotkeyClickWindow= 350
 
 ; Auto-hide icons: when the icons are visible and NO normal windows are on
 ; screen (all closed / all minimized) for this many seconds, the icons are
-; hidden automatically. 0 = disabled. As soon as any window becomes visible
-; again the countdown restarts; restore the icons with your usual toggle
+; hidden automatically. ANY physical mouse or keyboard input restarts the
+; countdown. 0 = disabled. Restore the icons with your usual toggle
 ; (double-click / hotkey)
 AutoHideSeconds=0
 	)
@@ -333,7 +334,6 @@ ReloadConfig:
 	RegisterDesktopHotkey()
 	LButton_presses := 0
 	DesktopHotkey_presses := 0
-	AutoHideStart := ""    ; restart the auto-hide countdown with the new settings
 return
 
 ; Desktop hotkey: fires when the desktop is active; toggles after HotkeyClicks
@@ -363,27 +363,18 @@ return
 ; Auto-hide timer
 ; ============================================================================
 ; Runs once a second. When the feature is enabled (AutoHideSeconds > 0) it
-; watches for a "clear desktop": icons visible AND no visible normal windows.
-; Once that state lasts AutoHideSeconds, the icons are hidden once; the
-; countdown restarts whenever a window appears or the icons are not visible.
+; hides the visible icons once the desktop has stayed "clear" (no visible
+; normal windows) for AutoHideSeconds. A_TimeIdlePhysical measures the time
+; since the last PHYSICAL mouse/keyboard input, so every mouse move, click or
+; keypress restarts the countdown; artificial input (e.g. Send) is ignored.
+; Icons are only hidden, never auto-shown.
 AutoHideCheck:
 	if (AutoHideSeconds < 1)                    ; feature disabled -> stay idle
 		return
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
-	{
-		AutoHideStart := ""                     ; streak broken -> reset
 		return
-	}
-	if (AutoHideStart = "")
-	{
-		AutoHideStart := A_TickCount            ; clear-desktop streak begins now
-		return
-	}
-	if (A_TickCount - AutoHideStart >= AutoHideSeconds * 1000)
-	{
-		AutoHideStart := ""
+	if (A_TimeIdlePhysical >= AutoHideSeconds * 1000)
 		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; sync with the click/hotkey logic
-	}
 return
 
 ; ============================================================================

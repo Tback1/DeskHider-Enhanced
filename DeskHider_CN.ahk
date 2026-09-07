@@ -7,12 +7,14 @@
 ;  托盘菜单：Open Config File / Reload Config / Exit
 ;  托盘点 Reload Config 可让 ini 修改立即生效，无需重启程序
 ;
-;  自动隐藏：图标处于显示状态、且屏幕上没有任何可见窗口并持续一段时间后，
-;           自动隐藏图标（AutoHideSeconds，0 = 禁用）
+;  自动隐藏：图标处于显示状态、且屏幕上没有任何可见窗口、也没有任何键鼠
+;           操作，持续一段时间后自动隐藏图标（AutoHideSeconds，0 = 禁用）
 ; ============================================================================
 
 #SingleInstance, Force
 #Persistent
+#InstallMouseHook                 ; 安装鼠标/键盘钩子，保证 A_TimeIdlePhysical
+#InstallKeybdHook                 ; 能准确反映真实的键鼠输入（自动隐藏用）
 
 ; ----------------------------------------------------------------------------
 ; 配置变量（默认值；实际以 DeskHider_CN.ini 为准）
@@ -24,8 +26,7 @@ DesktopHotkey     := ""     ; 桌面快捷键；留空 = 禁用
 PrevDesktopHotkey := ""     ; 上一次注册的快捷键（Reload 时先注销再注册）
 HotkeyClicks      := 2      ; 快捷键连按次数：2 = 双按，3 = 三按
 HotkeyClickWindow := 350    ; 快捷键连按最大间隔（毫秒）；留空 = 与鼠标相同
-AutoHideSeconds   := 0      ; 无窗口状态持续 N 秒后自动隐藏图标；0 = 禁用
-AutoHideStart     := ""     ; 当前"无窗口"计时的起始 TickCount（"" = 未在计时）
+AutoHideSeconds   := 0      ; 无窗口且无键鼠操作持续 N 秒后自动隐藏图标；0 = 禁用
 
 ; ----------------------------------------------------------------------------
 ; 启动：读取配置 + 注册桌面快捷键
@@ -169,9 +170,9 @@ HotkeyClicks=2
 HotkeyClickWindow= 350
 
 ; 自动隐藏图标：当图标处于显示状态，且屏幕上没有任何普通窗口
-; （窗口全部关闭 / 全部最小化）持续达到该秒数后，自动隐藏图标
-; 0 = 禁用该功能；期间只要出现任何可见窗口，计时就会重新开始
-; 重新显示图标用平时的方式即可（双击桌面 / 快捷键）
+; （全部关闭 / 全部最小化）持续达到该秒数后，自动隐藏图标
+; 任何鼠标、键盘操作都会让倒计时重新开始
+; 0 = 禁用该功能；重新显示图标用平时的方式即可（双击桌面 / 快捷键）
 AutoHideSeconds=0
 	)
 	FileAppend, %Template%, %IniFile%
@@ -324,7 +325,6 @@ ReloadConfig:
 	RegisterDesktopHotkey()
 	LButton_presses := 0
 	DesktopHotkey_presses := 0
-	AutoHideStart := ""    ; 用新配置重新开始自动隐藏的计时
 return
 
 ; 桌面快捷键：桌面处于可触发状态时才计数，连按 HotkeyClicks 次（默认 2 次）
@@ -352,27 +352,18 @@ return
 ; ============================================================================
 ; 自动隐藏计时器
 ; ============================================================================
-; 每秒运行一次。功能开启时（AutoHideSeconds > 0）监视"干净桌面"状态：
-; 图标可见 且 屏幕上没有可见的普通窗口。该状态持续达到 AutoHideSeconds
-; 秒后，自动隐藏一次图标；只要出现窗口、或图标本就不可见，计时立即清零。
+; 每秒运行一次。功能开启时（AutoHideSeconds > 0），"干净桌面"（没有可见的
+; 普通窗口）持续达到 AutoHideSeconds 秒后，自动隐藏一次图标。
+; A_TimeIdlePhysical = 距上一次"物理"键鼠输入的毫秒数，因此任何鼠标移动、
+; 点击、按键都会让倒计时重新开始；程序自己模拟的输入（如 Send）不会算进去。
+; 只隐藏、从不自动恢复。
 AutoHideCheck:
 	if (AutoHideSeconds < 1)                    ; 功能禁用 -> 空转
 		return
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
-	{
-		AutoHideStart := ""                     ; 条件被打破 -> 重置计时
 		return
-	}
-	if (AutoHideStart = "")
-	{
-		AutoHideStart := A_TickCount            ; "无窗口"计时开始
-		return
-	}
-	if (A_TickCount - AutoHideStart >= AutoHideSeconds * 1000)
-	{
-		AutoHideStart := ""
+	if (A_TimeIdlePhysical >= AutoHideSeconds * 1000)
 		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; 与点击/快捷键的状态保持同步
-	}
 return
 
 ; ============================================================================
