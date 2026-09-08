@@ -28,6 +28,7 @@ PrevDesktopHotkey := ""     ; Previously registered hotkey (unregistered first o
 HotkeyClicks      := 2      ; Hotkey presses to toggle: 2 = double-press, 3 = triple-press
 HotkeyClickWindow := 350    ; Max interval between hotkey presses (ms); empty = same as mouse
 AutoHideSeconds   := 0      ; Auto-hide icons after N seconds of windowless desktop; 0 = disabled
+AutoHideLastToggle := 0     ; TickCount of the last manual toggle (restarts the auto-hide countdown)
 
 ; ----------------------------------------------------------------------------
 ; Startup: load config + register the desktop hotkey
@@ -63,12 +64,16 @@ return
 #If
 
 ; Toggle icons when the condition is met (original behavior: does not trigger
-; over an icon unless the icons are already hidden)
+; over an icon unless the icons are already hidden). Any manual toggle
+; restarts the auto-hide countdown.
 MaybeToggleDesktopIcons()
 {
-	global DesktopIconsIsShow
+	global DesktopIconsIsShow, AutoHideLastToggle
 	if (!IsObject(GetDesktopIconUnderMouse()) or DesktopIconsIsShow = 0)
+	{
 		DesktopIconsIsShow := HideOrShowDesktopIcons()
+		AutoHideLastToggle := A_TickCount
+	}
 }
 
 ; ============================================================================
@@ -175,9 +180,10 @@ HotkeyClickWindow= 350
 
 ; Auto-hide icons: when the icons are visible and NO normal windows are on
 ; screen (all closed / all minimized) for this many seconds, the icons are
-; hidden automatically. ANY physical mouse or keyboard input restarts the
-; countdown. 0 = disabled. Restore the icons with your usual toggle
-; (double-click / hotkey)
+; hidden automatically. Any mouse or keyboard input - even clicks injected
+; by other software - and every manual toggle restarts the countdown.
+; 0 = disabled. Restore the icons with your usual toggle (double-click /
+; hotkey)
 AutoHideSeconds=0
 	)
 	FileAppend, %Template%, %IniFile%
@@ -348,7 +354,10 @@ ToggleDesktopHotkey:
 	DesktopHotkey_presses++
 	SetTimer, KeyDesktopHotkey, -%HotkeyClickWindow%
 	if (DesktopHotkey_presses = HotkeyClicks)
+	{
 		DesktopIconsIsShow := HideOrShowDesktopIcons()
+		AutoHideLastToggle := A_TickCount    ; manual toggle restarts the auto-hide countdown
+	}
 return
 
 KeyDesktopHotkey:
@@ -362,18 +371,23 @@ return
 ; ============================================================================
 ; Auto-hide timer
 ; ============================================================================
-; Runs once a second. When the feature is enabled (AutoHideSeconds > 0) it
-; hides the visible icons once the desktop has stayed "clear" (no visible
-; normal windows) for AutoHideSeconds. A_TimeIdlePhysical measures the time
-; since the last PHYSICAL mouse/keyboard input, so every mouse move, click or
-; keypress restarts the countdown; artificial input (e.g. Send) is ignored.
-; Icons are only hidden, never auto-shown.
+; Runs once a second. Hides the visible icons once the desktop has stayed
+; "clear" (no visible normal windows) with no input of any kind for
+; AutoHideSeconds. Two idle clocks must both exceed the threshold:
+;   A_TimeIdlePhysical - last PHYSICAL mouse/keyboard input
+;   A_TimeIdle         - last input of ANY kind (also clicks/keys injected
+;                        by other software, which physical-only misses)
+; so every mouse move, click or keypress - real or synthetic - restarts the
+; countdown. A manual toggle (mouse or hotkey) restarts it explicitly via
+; AutoHideLastToggle. Icons are only hidden, never auto-shown.
 AutoHideCheck:
 	if (AutoHideSeconds < 1)                    ; feature disabled -> stay idle
 		return
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
 		return
-	if (A_TimeIdlePhysical >= AutoHideSeconds * 1000)
+	if (A_TickCount - AutoHideLastToggle < AutoHideSeconds * 1000)
+		return                                  ; recent manual toggle -> grace period
+	if (A_TimeIdle >= AutoHideSeconds * 1000 and A_TimeIdlePhysical >= AutoHideSeconds * 1000)
 		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; sync with the click/hotkey logic
 return
 

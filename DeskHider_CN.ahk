@@ -27,6 +27,7 @@ PrevDesktopHotkey := ""     ; 上一次注册的快捷键（Reload 时先注销�
 HotkeyClicks      := 2      ; 快捷键连按次数：2 = 双按，3 = 三按
 HotkeyClickWindow := 350    ; 快捷键连按最大间隔（毫秒）；留空 = 与鼠标相同
 AutoHideSeconds   := 0      ; 无窗口且无键鼠操作持续 N 秒后自动隐藏图标；0 = 禁用
+AutoHideLastToggle := 0     ; 上一次手动切换图标的 TickCount（手动切换会重置自动隐藏倒计时）
 
 ; ----------------------------------------------------------------------------
 ; 启动：读取配置 + 注册桌面快捷键
@@ -62,12 +63,15 @@ return
 #If
 
 ; 满足条件时切换图标显隐（保留原行为：图标未隐藏时，点在图标上不触发，
-; 不影响正常打开图标）
+; 不影响正常打开图标）。任何手动切换都会重置自动隐藏的倒计时。
 MaybeToggleDesktopIcons()
 {
-	global DesktopIconsIsShow
+	global DesktopIconsIsShow, AutoHideLastToggle
 	if (!IsObject(GetDesktopIconUnderMouse()) or DesktopIconsIsShow = 0)
+	{
 		DesktopIconsIsShow := HideOrShowDesktopIcons()
+		AutoHideLastToggle := A_TickCount
+	}
 }
 
 ; ============================================================================
@@ -171,7 +175,8 @@ HotkeyClickWindow= 350
 
 ; 自动隐藏图标：当图标处于显示状态，且屏幕上没有任何普通窗口
 ; （全部关闭 / 全部最小化）持续达到该秒数后，自动隐藏图标
-; 任何鼠标、键盘操作都会让倒计时重新开始
+; 任何鼠标、键盘操作（包括其他软件模拟的点击）都会让倒计时重新开始；
+; 手动切换图标后倒计时同样重新开始
 ; 0 = 禁用该功能；重新显示图标用平时的方式即可（双击桌面 / 快捷键）
 AutoHideSeconds=0
 	)
@@ -338,7 +343,10 @@ ToggleDesktopHotkey:
 	DesktopHotkey_presses++
 	SetTimer, KeyDesktopHotkey, -%HotkeyClickWindow%
 	if (DesktopHotkey_presses = HotkeyClicks)
+	{
 		DesktopIconsIsShow := HideOrShowDesktopIcons()
+		AutoHideLastToggle := A_TickCount    ; 手动切换后重置自动隐藏倒计时
+	}
 return
 
 KeyDesktopHotkey:
@@ -353,16 +361,22 @@ return
 ; 自动隐藏计时器
 ; ============================================================================
 ; 每秒运行一次。功能开启时（AutoHideSeconds > 0），"干净桌面"（没有可见的
-; 普通窗口）持续达到 AutoHideSeconds 秒后，自动隐藏一次图标。
-; A_TimeIdlePhysical = 距上一次"物理"键鼠输入的毫秒数，因此任何鼠标移动、
-; 点击、按键都会让倒计时重新开始；程序自己模拟的输入（如 Send）不会算进去。
+; 普通窗口）且没有任何输入持续达到 AutoHideSeconds 秒后，自动隐藏一次图标。
+; 用两个"闲置时钟"同时判断，任一未超时都不隐藏：
+;   A_TimeIdlePhysical - 距上一次"物理"键鼠输入（只认真实键鼠）
+;   A_TimeIdle         - 距上一次任何输入（包括其他软件模拟的点击/按键，
+;                        只查物理时钟会漏掉这类输入）
+; 因此任何鼠标移动、点击、按键——真实的或软件模拟的——都会让倒计时重新
+; 开始；手动切换图标（鼠标或快捷键）也会显式重置倒计时（AutoHideLastToggle）。
 ; 只隐藏、从不自动恢复。
 AutoHideCheck:
 	if (AutoHideSeconds < 1)                    ; 功能禁用 -> 空转
 		return
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
 		return
-	if (A_TimeIdlePhysical >= AutoHideSeconds * 1000)
+	if (A_TickCount - AutoHideLastToggle < AutoHideSeconds * 1000)
+		return                                  ; 刚手动切换过 -> 宽限期内不隐藏
+	if (A_TimeIdle >= AutoHideSeconds * 1000 and A_TimeIdlePhysical >= AutoHideSeconds * 1000)
 		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; 与点击/快捷键的状态保持同步
 return
 

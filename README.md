@@ -48,7 +48,7 @@ AutoHideSeconds=0     ; auto-hide after N seconds of clear desktop, 0=disabled
 | `Hotkey` | `Space` | Desktop hotkey (default `Space`, double-press); empty = disabled. Fires when **either** ① no visible top-level windows exist (all closed / all minimized), or ② the desktop is focused (e.g. you clicked the desktop while a window is open). The **space bar is supported**: `Ctrl+Space`, `Space`. Two syntaxes: friendly `Ctrl+Alt+H`, or AHK native `^!h` (`^`=Ctrl, `!`=Alt, `+`=Shift, `#`=Win). Multi-press triggered (2 presses by default); never swallows keys, typing is unaffected. |
 | `HotkeyClicks` | `2` | Hotkey presses needed to toggle (2 = double-press, 3 = triple-press). |
 | `HotkeyClickWindow` | *(same as mouse)* | Max interval between hotkey presses in milliseconds (150–1000). Empty = same as `ClickWindow`. |
-| `AutoHideSeconds` | `0` | **Auto-hide**: when the icons are visible and **no normal windows are on screen** (all closed / all minimized) for this many seconds, the icons are hidden automatically. Any physical mouse move, click or keypress restarts the countdown. `0` = disabled. Restore the icons with your usual toggle (double-click / hotkey). Example: `30` = hide icons after 30 seconds of a clear, untouched desktop. |
+| `AutoHideSeconds` | `0` | **Auto-hide**: when the icons are visible and **no normal windows are on screen** (all closed / all minimized) for this many seconds, the icons are hidden automatically. Any mouse or keyboard activity — physical or injected by other software — and every manual toggle restarts the countdown. `0` = disabled. Restore the icons with your usual toggle (double-click / hotkey). Example: `30` = hide icons after 30 seconds of a clear, untouched desktop. |
 
 ### Example
 
@@ -70,7 +70,7 @@ Triple-click the desktop to toggle icons, or double-press `Ctrl+Space` (while th
 AutoHideSeconds=30
 ```
 
-Close or minimize every window, stop touching the mouse and keyboard, and after 30 seconds of nothing but the desktop the icons hide themselves — handy for a clean wallpaper view. Any input or any opened window restarts the countdown; the icons are never auto-*shown*, only hidden.
+Close or minimize every window, stop touching the mouse and keyboard, and after 30 seconds of nothing but the desktop the icons hide themselves — handy for a clean wallpaper view. Any input, any opened window, or a manual toggle restarts the countdown; the icons are never auto-*shown*, only hidden.
 
 ## After changing the config
 
