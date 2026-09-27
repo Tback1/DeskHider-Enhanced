@@ -29,10 +29,12 @@ HotkeyClickWindow := 350    ; 快捷键连按最大间隔（毫秒）；留空 =
 AutoHideSeconds   := 0      ; 无窗口且无键鼠操作持续 N 秒后自动隐藏图标；0 = 禁用
 AutoHideLastToggle := 0     ; 上一次手动切换图标的 TickCount（手动切换会重置自动隐藏倒计时）
 
-; 防止鼠标钩子中双击触发时的 Explorer 崩溃问题标志
-LastMouseClickTime := 0
-LastMouseClickX := 0
-LastMouseClickY := 0
+; 鼠标状态标志
+LButton_presses   := 0      ; 鼠标连击计数
+DesktopHotkey_presses := 0  ; 快捷键连按计数
+
+; 记录待执行的隐藏/显示操作（延迟执行防止时序冲突）
+PendingToggle     := 0      ; 0 = 无待执行，1 = 待执行隐藏/显示
 
 ; ----------------------------------------------------------------------------
 ; 启动：读取配置 + 注册桌面快捷键
@@ -53,18 +55,26 @@ Menu, Tray, Tip, DeskHider
 
 ; ============================================================================
 ; 鼠标连击（仅在鼠标位于桌面上时生效）
-; 关键修复：移除透传，改为阻止鼠标事件冲突
+; 关键修复：检测图标 + 延迟隐藏 防止时序冲突
 ; ============================================================================
 #If IsDesktopUnderMouse()
 LButton::
+	MouseGetPos, CurrentX, CurrentY
 	LButton_presses++
 	SetTimer, KeyLButton, -%ClickWindow%
 	if (LButton_presses = Clicks)
 	{
-		MaybeToggleDesktopIcons()
+		; 双击确认后，检查是否点在图标上
+		IconInfo := GetDesktopIconUnderMouse()
+		if (!IsObject(IconInfo))
+		{
+			; 点在空白处，执行切换（延迟 100ms 防止时序冲突）
+			PendingToggle := 1
+			SetTimer, ExecutePendingToggle, 100
+		}
+		; 若点在图标上，不做任何处理（让图标打开逻辑自行进行）
 		LButton_presses := 0
 	}
-	; 不透传，直接返回，防止 Explorer 收到冲突信号
 return
 
 KeyLButton:
@@ -72,37 +82,27 @@ KeyLButton:
 return
 #If
 
-; 满足条件时切换图标显隐。关键修复：添加多重防护，防止鼠标钩子与 Windows 原生事件冲突。
+; 执行延迟的隐藏/显示操作（给 Explorer 足够的时间处理点击）
+ExecutePendingToggle:
+	SetTimer, ExecutePendingToggle, Off
+	if (PendingToggle = 1)
+	{
+		PendingToggle := 0
+		MaybeToggleDesktopIcons()
+	}
+return
+
+; 满足条件时切换图标显隐。
 MaybeToggleDesktopIcons()
 {
 	global DesktopIconsIsShow, AutoHideLastToggle
 	
-	; 防护 1：仅在焦点在桌面或没有可见窗口时才处理
+	; 仅在焦点在桌面或没有可见窗口时才处理
 	if (!IsDesktopFocused())
 		return
 	
-	; 防护 2：检查是否点在了图标上（如果是，不处理）
-	IconInfo := GetDesktopIconUnderMouse()
-	if (IsObject(IconInfo))
-	{
-		; 点在了图标上，不拦截，让鼠标事件继续传递
-		; 透传鼠标点击给原生双击处理
-		SendMessage, WM_LBUTTONDBLCLK, 0, 0,, ahk_class Progman
-		return
-	}
-	
-	; 防护 3：切换图标状态
-	if (DesktopIconsIsShow = 0)
-	{
-		DesktopIconsIsShow := HideOrShowDesktopIcons()
-		AutoHideLastToggle := A_TickCount
-	}
-	else if (!IsObject(IconInfo))
-	{
-		; 只有点在空白处才隐藏
-		DesktopIconsIsShow := HideOrShowDesktopIcons()
-		AutoHideLastToggle := A_TickCount
-	}
+	DesktopIconsIsShow := HideOrShowDesktopIcons()
+	AutoHideLastToggle := A_TickCount
 }
 
 ; ============================================================================
@@ -361,6 +361,7 @@ ReloadConfig:
 	RegisterDesktopHotkey()
 	LButton_presses := 0
 	DesktopHotkey_presses := 0
+	PendingToggle := 0
 return
 
 ; 桌面快捷键：桌面处于可触发状态时才计数，连按 HotkeyClicks 次（默认 2 次）
@@ -394,7 +395,7 @@ return
 ; 每秒运行一次。功能开启时（AutoHideSeconds > 0），"干净桌面"（没有可见的
 ; 普通窗口）且没有任何输入持续达到 AutoHideSeconds 秒后，自动隐藏一次图标。
 ; 用两个"闲置时钟"同时判断，任一未超时都不隐藏：
-;   A_TimeIdlePhysical - 距上一次"物理"键鼠输入（只认真实键鼠）
+;   A_TimeIdlePhysical - ���上一次"物理"键鼠输入（只认真实键鼠）
 ;   A_TimeIdle         - 距上一次任何输入（包括其他软件模拟的点击/按键，
 ;                        只查物理时钟会漏掉这类输入）
 ; 因此任何鼠标移动、点击、按键——真实的或软件模拟的——都会让倒计时重新
