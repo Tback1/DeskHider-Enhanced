@@ -34,7 +34,7 @@ AutoHideLastToggle := 0     ; 上一次手动切换图标的 TickCount（手动�
 ; ----------------------------------------------------------------------------
 LoadConfig()
 RegisterDesktopHotkey()
-SetTimer, AutoHideCheck, 1000     ; 每秒���次的自动隐藏检查（禁用时自动空转）
+SetTimer, AutoHideCheck, 1000     ; 每秒一次的自动隐藏检查（禁用时自动空转）
 
 ; ----------------------------------------------------------------------------
 ; 托盘菜单
@@ -176,7 +176,7 @@ Hotkey=Space
 HotkeyClicks=2
 
 ; 桌面快捷键连击间隔（毫秒），留空 = 与鼠标 ClickWindow 相同
-HotkeyClickWindow= 350
+HotkeyClickWindow=350
 
 ; 自动隐藏图标：当图标处于显示状态，且屏幕上没有任何普通窗口
 ; （全部关闭 / 全部最小化）持续达到该秒数后，自动隐藏图标
@@ -215,7 +215,7 @@ IsDesktopFocused()
 	return IsDesktopClear()
 }
 
-; 屏幕上没有任何"可见的普通窗���"时返回 1（全部关闭 / 全部最小化）。
+; 屏幕上没有任何"可见的普通窗口"时返回 1（全部关闭 / 全部最小化）。
 ; 最小化、隐藏、工具窗口、被 DWM 遮蔽的窗口，以及桌面和任务栏窗口本身，
 ; 都不算"可见的普通窗口"。
 IsDesktopClear()
@@ -244,7 +244,7 @@ IsDesktopClear()
 
 ; DWMWA_CLOAKED（14）：窗口被 DWM"遮蔽"时返回非 0（典型：挂起的 UWP 应用、
 ; 其他虚拟桌面上的窗口——样式上"可见"但屏幕上并没有显示）。
-; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统下都安全。
+; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统���都安全。
 IsWindowCloaked(hwnd)
 {
 	cloaked := 0
@@ -380,7 +380,7 @@ AutoHideCheck:
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
 		return
 	if (A_TickCount - AutoHideLastToggle < AutoHideSeconds * 1000)
-		return                                  ; 刚手动切换过 -> 宽限期内不隐藏
+		return                                  ; 刚手动切换过 -> 宽限期���不隐藏
 	if (A_TimeIdle >= AutoHideSeconds * 1000 and A_TimeIdlePhysical >= AutoHideSeconds * 1000)
 		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; 与点击/快捷键的状态保持同步
 return
@@ -394,32 +394,32 @@ IsDesktopUnderMouse()
 	MouseGetPos, , , OutputVarWin
 	WinGetClass, OutputVarClass, % "ahk_id" OutputVarWin
 	if (OutputVarClass="WorkerW" or OutputVarClass="Progman")
-		return, 1
+		return 1
 	else
-		return, 0
+		return 0
 }
 
 HideOrShowDesktopIcons()
 {
 	ControlGet, OutputVarHwnd, Hwnd,, SysListView321, ahk_class WorkerW
 	if (OutputVarHwnd="")
-      ControlGet, OutputVarHwnd, Hwnd,, SysListView321, ahk_class Progman
+		ControlGet, OutputVarHwnd, Hwnd,, SysListView321, ahk_class Progman
 
 	if (DllCall("IsWindowVisible", UInt, OutputVarHwnd))
 	{
 		WinHide, ahk_id %OutputVarHwnd%
-		return, 0
+		return 0
 	}
 	else
 	{
 		WinShow, ahk_id %OutputVarHwnd%
-		return, 1
+		return 1
 	}
 }
 
 ; 桌面图标列表（SysListView32）当前是否可见：可见返回 1，隐藏（或找不到
 ; 控件）返回 0。直接查询真实窗口状态，而不是依赖 DesktopIconsIsShow 标记，
-; 因此脚本刚启动时结果也是准确的。
+; 因此脚本刚启动时结果也是��确的。
 AreDesktopIconsVisible()
 {
 	hwnd := ""
@@ -431,7 +431,8 @@ AreDesktopIconsVisible()
 	return DllCall("IsWindowVisible", "Ptr", hwnd) ? 1 : 0
 }
 
-GetDesktopIconUnderMouse() {
+GetDesktopIconUnderMouse()
+{
 	static MEM_COMMIT := 0x1000, MEM_RELEASE := 0x8000, PAGE_ReadWRITE := 0x04
 		, PROCESS_VM_OPERATION := 0x0008, PROCESS_VM_READ := 0x0010
 		, LVM_GETITEMCOUNT := 0x1004, LVM_GETITEMRECT := 0x100E
@@ -444,10 +445,12 @@ GetDesktopIconUnderMouse() {
 	if not WinExist("ahk_id" hwnd)
 		return
 	WinGet, pid, PID
-	if (hProcess := DllCall("OpenProcess" , "UInt", Process_VM_OPERATION|Process_VM_Read, "Int",  false, "UInt", pid)) {
+	if (hProcess := DllCall("OpenProcess" , "UInt", Process_VM_OPERATION|Process_VM_Read, "Int", false, "UInt", pid))
+	{
 		VarSetCapacity(iCoord, 16)
 		SendMessage, %LVM_GETITEMCOUNT%, 0, 0
-		loop, %ErrorLevel% {
+		loop, %ErrorLevel%
+		{
 			pItemCoord := DllCall("VirtualAllocEx", "Ptr", hProcess, "Ptr", 0, "UInt", 16, "UInt", MEM_COMMIT, "UInt", PAGE_ReadWRITE)
 			SendMessage, %LVM_GETITEMRECT%, % A_Index-1, %pItemCoord%
 			DllCall("ReadProcessMemory", "Ptr", hProcess, "Ptr", pItemCoord, "Ptr", &iCoord, "UInt", 16, "UInt", 0)
@@ -456,14 +459,12 @@ GetDesktopIconUnderMouse() {
 			top    := NumGet(iCoord,  4, "Int")
 			Right  := NumGet(iCoord,  8, "Int")
 			bottom := NumGet(iCoord, 12, "Int")
-			if (left < x and x < Right and top < y and y < bottom) {
+			if (left < x and x < Right and top < y and y < bottom)
+			{
 				ControlGet, list, List
 				RegExMatch(StrSplit(list, "`n")[A_Index], "O)(.*)\t(.*)\t(.*)\t(.*)", Match)
 				Icon := {left:left, top:top, Right:Right, bottom:bottom
 					, name:Match[1], size:Match[2], type:Match[3]
-				; 去掉日期里多余的字符（https://goo.gl/pMw6AM）：
-				; - Unicode LTR（从左到右）标记 (0x200E = 8206)
-				; - Unicode RTL（从右到左）标记 (0x200F = 8207)
 					, date:RegExReplace(Match[4], A_IsUnicode ? "[\x{200E}-\x{200F}]" : "\?")}
 				break
 			}
