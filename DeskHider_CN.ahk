@@ -1,4 +1,4 @@
-﻿; ============================================================================
+; ============================================================================
 ;  DeskHider_CN - 双击桌面空白处，切换桌面图标的显示 / 隐藏
 ;  轻量化：无界面、无弹窗；所有设置都保存在 DeskHider_CN.ini
 ;
@@ -34,7 +34,7 @@ AutoHideLastToggle := 0     ; 上一次手动切换图标的 TickCount（手动�
 ; ----------------------------------------------------------------------------
 LoadConfig()
 RegisterDesktopHotkey()
-SetTimer, AutoHideCheck, 1000     ; 每秒一次的自动隐藏检查（禁用时自动空转）
+SetTimer, AutoHideCheck, 1000     ; 每秒���次的自动隐藏检查（禁用时自动空转）
 
 ; ----------------------------------------------------------------------------
 ; 托盘菜单
@@ -62,11 +62,16 @@ KeyLButton:
 return
 #If
 
-; 满足条件时切换图标显隐（保留原行为：图标未隐藏时，点在图标上不触发，
-; 不影响正常打开图标）。任何手动切换都会重置自动隐藏的倒计时。
+; 满足条件时切换图标显隐。修复：添加 IsDesktopFocused() 检查，防止鼠标钩子
+; 与 Windows 原生事件冲突导致黑屏。任何手动切换都会重置自动隐藏的倒计时。
 MaybeToggleDesktopIcons()
 {
 	global DesktopIconsIsShow, AutoHideLastToggle
+	
+	; 仅在焦点在桌面或没有可见窗口时才处理，防止事件冲突
+	if (!IsDesktopFocused())
+		return
+	
 	if (!IsObject(GetDesktopIconUnderMouse()) or DesktopIconsIsShow = 0)
 	{
 		DesktopIconsIsShow := HideOrShowDesktopIcons()
@@ -210,7 +215,7 @@ IsDesktopFocused()
 	return IsDesktopClear()
 }
 
-; 屏幕上没有任何"可见的普通窗口"时返回 1（全部关闭 / 全部最小化）。
+; 屏幕上没有任何"可见的普通窗���"时返回 1（全部关闭 / 全部最小化）。
 ; 最小化、隐藏、工具窗口、被 DWM 遮蔽的窗口，以及桌面和任务栏窗口本身，
 ; 都不算"可见的普通窗口"。
 IsDesktopClear()
