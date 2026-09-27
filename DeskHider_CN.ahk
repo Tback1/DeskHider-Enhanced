@@ -149,7 +149,7 @@ CreateDefaultIni()
 {
 	global IniFile
 	Template =
-	(
+(
 ; DeskHider_CN 配置文件
 ; 修改保存后，在托盘菜单点"Reload Config"即可生效（无需重启程序）
 ; 每项格式：名称=值，行首分号 ; 表示注释
@@ -184,7 +184,7 @@ HotkeyClickWindow=350
 ; 手动切换图标后倒计时同样重新开始
 ; 0 = 禁用该功能；重新显示图标用平时的方式即可（双击桌面 / 快捷键）
 AutoHideSeconds=0
-	)
+)
 	FileAppend, %Template%, %IniFile%
 }
 
@@ -244,7 +244,7 @@ IsDesktopClear()
 
 ; DWMWA_CLOAKED（14）：窗口被 DWM"遮蔽"时返回非 0（典型：挂起的 UWP 应用、
 ; 其他虚拟桌面上的窗口——样式上"可见"但屏幕上并没有显示）。
-; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统���都安全。
+; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统都安全。
 IsWindowCloaked(hwnd)
 {
 	cloaked := 0
@@ -380,7 +380,7 @@ AutoHideCheck:
 	if (!AreDesktopIconsVisible() or !IsDesktopClear())
 		return
 	if (A_TickCount - AutoHideLastToggle < AutoHideSeconds * 1000)
-		return                                  ; 刚手动切换过 -> 宽限期���不隐藏
+		return                                  ; 刚手动切换过 -> 宽限期内不隐藏
 	if (A_TimeIdle >= AutoHideSeconds * 1000 and A_TimeIdlePhysical >= AutoHideSeconds * 1000)
 		DesktopIconsIsShow := HideOrShowDesktopIcons()   ; 与点击/快捷键的状态保持同步
 return
@@ -419,7 +419,7 @@ HideOrShowDesktopIcons()
 
 ; 桌面图标列表（SysListView32）当前是否可见：可见返回 1，隐藏（或找不到
 ; 控件）返回 0。直接查询真实窗口状态，而不是依赖 DesktopIconsIsShow 标记，
-; 因此脚本刚启动时结果也是��确的。
+; 因此脚本刚启动时结果也是准确的。
 AreDesktopIconsVisible()
 {
 	hwnd := ""
