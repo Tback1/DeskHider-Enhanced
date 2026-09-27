@@ -29,6 +29,11 @@ HotkeyClickWindow := 350    ; 快捷键连按最大间隔（毫秒）；留空 =
 AutoHideSeconds   := 0      ; 无窗口且无键鼠操作持续 N 秒后自动隐藏图标；0 = 禁用
 AutoHideLastToggle := 0     ; 上一次手动切换图标的 TickCount（手动切换会重置自动隐藏倒计时）
 
+; 防止鼠标钩子中双击触发时的 Explorer 崩溃问题标志
+LastMouseClickTime := 0
+LastMouseClickX := 0
+LastMouseClickY := 0
+
 ; ----------------------------------------------------------------------------
 ; 启动：读取配置 + 注册桌面快捷键
 ; ----------------------------------------------------------------------------
@@ -48,13 +53,18 @@ Menu, Tray, Tip, DeskHider
 
 ; ============================================================================
 ; 鼠标连击（仅在鼠标位于桌面上时生效）
+; 关键修复：移除透传，改为阻止鼠标事件冲突
 ; ============================================================================
 #If IsDesktopUnderMouse()
-~LButton::
+LButton::
 	LButton_presses++
 	SetTimer, KeyLButton, -%ClickWindow%
 	if (LButton_presses = Clicks)
+	{
 		MaybeToggleDesktopIcons()
+		LButton_presses := 0
+	}
+	; 不透传，直接返回，防止 Explorer 收到冲突信号
 return
 
 KeyLButton:
@@ -62,18 +72,34 @@ KeyLButton:
 return
 #If
 
-; 满足条件时切换图标显隐。修复：添加 IsDesktopFocused() 检查，防止鼠标钩子
-; 与 Windows 原生事件冲突导致黑屏。任何手动切换都会重置自动隐藏的倒计时。
+; 满足条件时切换图标显隐。关键修复：添加多重防护，防止鼠标钩子与 Windows 原生事件冲突。
 MaybeToggleDesktopIcons()
 {
 	global DesktopIconsIsShow, AutoHideLastToggle
 	
-	; 仅在焦点在桌面或没有可见窗口时才处理，防止事件冲突
+	; 防护 1：仅在焦点在桌面或没有可见窗口时才处理
 	if (!IsDesktopFocused())
 		return
 	
-	if (!IsObject(GetDesktopIconUnderMouse()) or DesktopIconsIsShow = 0)
+	; 防护 2：检查是否点在了图标上（如果是，不处理）
+	IconInfo := GetDesktopIconUnderMouse()
+	if (IsObject(IconInfo))
 	{
+		; 点在了图标上，不拦截，让鼠标事件继续传递
+		; 透传鼠标点击给原生双击处理
+		SendMessage, WM_LBUTTONDBLCLK, 0, 0,, ahk_class Progman
+		return
+	}
+	
+	; 防护 3：切换图标状态
+	if (DesktopIconsIsShow = 0)
+	{
+		DesktopIconsIsShow := HideOrShowDesktopIcons()
+		AutoHideLastToggle := A_TickCount
+	}
+	else if (!IsObject(IconInfo))
+	{
+		; 只有点在空白处才隐藏
 		DesktopIconsIsShow := HideOrShowDesktopIcons()
 		AutoHideLastToggle := A_TickCount
 	}
