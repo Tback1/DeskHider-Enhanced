@@ -29,13 +29,6 @@ HotkeyClickWindow := 350    ; 快捷键连按最大间隔（毫秒）；留空 =
 AutoHideSeconds   := 0      ; 无窗口且无键鼠操作持续 N 秒后自动隐藏图标；0 = 禁用
 AutoHideLastToggle := 0     ; 上一次手动切换图标的 TickCount（手动切换会重置自动隐藏倒计时）
 
-; 鼠标状态标志
-LButton_presses   := 0      ; 鼠标连击计数
-DesktopHotkey_presses := 0  ; 快捷键连按计数
-
-; 记录待执行的隐藏/显示操作（延迟执行防止时序冲突）
-PendingToggle     := 0      ; 0 = 无待执行，1 = 待执行隐藏/显示
-
 ; ----------------------------------------------------------------------------
 ; 启动：读取配置 + 注册桌面快捷键
 ; ----------------------------------------------------------------------------
@@ -54,27 +47,16 @@ Menu, Tray, Add, Exit, QuitScript
 Menu, Tray, Tip, DeskHider
 
 ; ============================================================================
-; 鼠标连击（仅在鼠标位于桌面上时生效）
-; 关键修复：检测图标 + 延迟隐藏 防止时序冲突
+; 鼠标连击（仅在桌面鼠标落在“右侧触发区”时生效）
+; 方案 B：不再检测全部桌面区域，而是只在屏幕右侧 40% 区域触发，避开 explorer
+; 处理桌面鼠标事件时的冲突。
 ; ============================================================================
-#If IsDesktopUnderMouse()
-LButton::
-	MouseGetPos, CurrentX, CurrentY
+#If IsDesktopUnderMouse() && IsDesktopTriggerZone()
+~LButton::
 	LButton_presses++
 	SetTimer, KeyLButton, -%ClickWindow%
 	if (LButton_presses = Clicks)
-	{
-		; 双击确认后，检查是否点在图标上
-		IconInfo := GetDesktopIconUnderMouse()
-		if (!IsObject(IconInfo))
-		{
-			; 点在空白处，执行切换（延迟 100ms 防止时序冲突）
-			PendingToggle := 1
-			SetTimer, ExecutePendingToggle, 100
-		}
-		; 若点在图标上，不做任何处理（让图标打开逻辑自行进行）
-		LButton_presses := 0
-	}
+		MaybeToggleDesktopIcons()
 return
 
 KeyLButton:
@@ -82,27 +64,27 @@ KeyLButton:
 return
 #If
 
-; 执行延迟的隐藏/显示操作（给 Explorer 足够的时间处理点击）
-ExecutePendingToggle:
-	SetTimer, ExecutePendingToggle, Off
-	if (PendingToggle = 1)
-	{
-		PendingToggle := 0
-		MaybeToggleDesktopIcons()
-	}
-return
+; 仅在屏幕右侧 40% 区域返回 1；避免所有桌面区域都参与双击切换
+; 这样不会在图标区域、任务栏附近、左侧工作区触发，减少与 Explorer 的冲突。
+IsDesktopTriggerZone()
+{
+	if (A_ScreenWidth <= 0)
+		return 0
+	MouseGetPos, mouseX, mouseY
+	return (mouseX >= A_ScreenWidth * 0.6)
+}
 
-; 满足条件时切换图标显隐。
+; 满足条件时切换图标显隐。任何手动切换都会重置自动隐藏的倒计时。
 MaybeToggleDesktopIcons()
 {
 	global DesktopIconsIsShow, AutoHideLastToggle
-	
-	; 仅在焦点在桌面或没有可见窗口时才处理
 	if (!IsDesktopFocused())
 		return
-	
-	DesktopIconsIsShow := HideOrShowDesktopIcons()
-	AutoHideLastToggle := A_TickCount
+	if (!IsObject(GetDesktopIconUnderMouse()) or DesktopIconsIsShow = 0)
+	{
+		DesktopIconsIsShow := HideOrShowDesktopIcons()
+		AutoHideLastToggle := A_TickCount
+	}
 }
 
 ; ============================================================================
@@ -175,7 +157,7 @@ CreateDefaultIni()
 {
 	global IniFile
 	Template =
-(
+	(
 ; DeskHider_CN 配置文件
 ; 修改保存后，在托盘菜单点"Reload Config"即可生效（无需重启程序）
 ; 每项格式：名称=值，行首分号 ; 表示注释
@@ -210,7 +192,7 @@ HotkeyClickWindow=350
 ; 手动切换图标后倒计时同样重新开始
 ; 0 = 禁用该功能；重新显示图标用平时的方式即可（双击桌面 / 快捷键）
 AutoHideSeconds=0
-)
+	)
 	FileAppend, %Template%, %IniFile%
 }
 
@@ -270,7 +252,7 @@ IsDesktopClear()
 
 ; DWMWA_CLOAKED（14）：窗口被 DWM"遮蔽"时返回非 0（典型：挂起的 UWP 应用、
 ; 其他虚拟桌面上的窗口——样式上"可见"但屏幕上并没有显示）。
-; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统都安全。
+; 不支持 DWM 的系统上调用会失败并返回 0，因此任何系统下都安全。
 IsWindowCloaked(hwnd)
 {
 	cloaked := 0
@@ -361,7 +343,6 @@ ReloadConfig:
 	RegisterDesktopHotkey()
 	LButton_presses := 0
 	DesktopHotkey_presses := 0
-	PendingToggle := 0
 return
 
 ; 桌面快捷键：桌面处于可触发状态时才计数，连按 HotkeyClicks 次（默认 2 次）
@@ -395,7 +376,7 @@ return
 ; 每秒运行一次。功能开启时（AutoHideSeconds > 0），"干净桌面"（没有可见的
 ; 普通窗口）且没有任何输入持续达到 AutoHideSeconds 秒后，自动隐藏一次图标。
 ; 用两个"闲置时钟"同时判断，任一未超时都不隐藏：
-;   A_TimeIdlePhysical - ���上一次"物理"键鼠输入（只认真实键鼠）
+;   A_TimeIdlePhysical - 距上一次"物理"键鼠输入（只认真实键鼠）
 ;   A_TimeIdle         - 距上一次任何输入（包括其他软件模拟的点击/按键，
 ;                        只查物理时钟会漏掉这类输入）
 ; 因此任何鼠标移动、点击、按键——真实的或软件模拟的——都会让倒计时重新
@@ -458,8 +439,7 @@ AreDesktopIconsVisible()
 	return DllCall("IsWindowVisible", "Ptr", hwnd) ? 1 : 0
 }
 
-GetDesktopIconUnderMouse()
-{
+GetDesktopIconUnderMouse() {
 	static MEM_COMMIT := 0x1000, MEM_RELEASE := 0x8000, PAGE_ReadWRITE := 0x04
 		, PROCESS_VM_OPERATION := 0x0008, PROCESS_VM_READ := 0x0010
 		, LVM_GETITEMCOUNT := 0x1004, LVM_GETITEMRECT := 0x100E
@@ -472,12 +452,10 @@ GetDesktopIconUnderMouse()
 	if not WinExist("ahk_id" hwnd)
 		return
 	WinGet, pid, PID
-	if (hProcess := DllCall("OpenProcess" , "UInt", Process_VM_OPERATION|Process_VM_Read, "Int", false, "UInt", pid))
-	{
+	if (hProcess := DllCall("OpenProcess" , "UInt", Process_VM_OPERATION|Process_VM_Read, "Int",  false, "UInt", pid)) {
 		VarSetCapacity(iCoord, 16)
 		SendMessage, %LVM_GETITEMCOUNT%, 0, 0
-		loop, %ErrorLevel%
-		{
+		loop, %ErrorLevel% {
 			pItemCoord := DllCall("VirtualAllocEx", "Ptr", hProcess, "Ptr", 0, "UInt", 16, "UInt", MEM_COMMIT, "UInt", PAGE_ReadWRITE)
 			SendMessage, %LVM_GETITEMRECT%, % A_Index-1, %pItemCoord%
 			DllCall("ReadProcessMemory", "Ptr", hProcess, "Ptr", pItemCoord, "Ptr", &iCoord, "UInt", 16, "UInt", 0)
@@ -486,12 +464,14 @@ GetDesktopIconUnderMouse()
 			top    := NumGet(iCoord,  4, "Int")
 			Right  := NumGet(iCoord,  8, "Int")
 			bottom := NumGet(iCoord, 12, "Int")
-			if (left < x and x < Right and top < y and y < bottom)
-			{
+			if (left < x and x < Right and top < y and y < bottom) {
 				ControlGet, list, List
 				RegExMatch(StrSplit(list, "`n")[A_Index], "O)(.*)\t(.*)\t(.*)\t(.*)", Match)
 				Icon := {left:left, top:top, Right:Right, bottom:bottom
 					, name:Match[1], size:Match[2], type:Match[3]
+				; 去掉日期里多余的字符（https://goo.gl/pMw6AM）：
+				; - Unicode LTR（从左到右）标记 (0x200E = 8206)
+				; - Unicode RTL（从右到左）标记 (0x200F = 8207)
 					, date:RegExReplace(Match[4], A_IsUnicode ? "[\x{200E}-\x{200F}]" : "\?")}
 				break
 			}
